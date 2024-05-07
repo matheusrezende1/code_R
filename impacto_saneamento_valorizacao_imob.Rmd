@@ -1,0 +1,152 @@
+---
+title: "Impacto do Saneamento Básico na Valorização Imobiliária"
+author: "Matheus Dias"
+date: "2024-05-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Impacto do Saneamento Básico na Valorização Imobiliária
+
+A presença de saneamento básico na residência, além de afetar a vida dos indivíduos em suas atividades cotidianas, também traz impactos sobre o próprio valor do imóvel. Para investigar o impacto do acesso ao saneamento básico na valorização imobiliária, foram analisados dados da Pesquisa Nacional por Amostra de Domicílios Contínua (PNADC) divulgada pelo IBGE em sua edição de 2019. A PNADC tem como objetivo principal coletar informações contínuas sobre a força de trabalho no Brasil e inclui dados sobre outras áreas como habitação e educação.
+
+A análise dos dados incluiu informações socioeconômicas sobre os indivíduos como renda, profissão, nível educacional, gênero, idade e detalhes sobre suas residências. Entre os dados residenciais, constavam itens como o método de coleta de esgoto, disponibilidade de água canalizada, presença de rede de distribuição de água, número de cômodos, número de banheiros, destinação do lixo, materiais utilizados nas paredes, materiais utilizados no piso, materiais utilizados no telhado, localização em área rural ou urbana, indicador se o imóvel se encontrar em uma capital e disponibilidade de energia elétrica.
+
+Como os valores venais ou de mercado dos imóveis não estavam disponíveis, o valor de aluguel pago pelos locatários foi utilizado como proxy para valor do imóvel. Foi então aplicado um modelo econométrico conhecido como Modelo de Preços Hedônicos , que visa determinar o impacto do saneamento no valor do imóvel, controlando pelas características intrínsecas do imóvel quanto pelas características do seu entorno
+
+Resultados apontam que a presença de Esgoto aumenta, em média, o valor de aluguel em **11,4%**, tudo mais constante. O efeito de possuir Rede de Água, por sua vez, é mais modesto e aumenta, em média, o valor de aluguel em **3,9%**.
+
+## Data Cleaning
+Pegamos dados da primeira entrevista da PNADC 2019, que contém um anexo sobre informações domiciliáres. Abaixo, estão alguns tratamentos realizados nos dados.
+```{r, message = F, echo = T, warning = F}
+rm(list=ls())
+
+library(tidyverse)
+library(PNADcIBGE)
+library(broom)
+library(gt)
+setwd("C:/Users/KG961DH/Downloads")
+df <- readxl::read_xlsx("pnad_2019_1tri.xlsx")
+
+df_reg <- df %>% 
+  mutate(homem = ifelse(genero == "Homem",1,0),
+         branco = ifelse(cor == "Branca",1,0),
+         urbano = ifelse(situacao_dom == "Urbana",1,0),
+         trab = ifelse(ocup == "Pessoas Ocupadas",1,0),
+         anos_estudo = case_when(estudo == "Sem instrução e menos de 1 ano de estudo" ~ 0,
+                                  estudo == "1 ano de estudo" ~ 1,
+                                  estudo == "2 anos de estudo" ~ 2,
+                                  estudo == "3 anos de estudo" ~ 3,
+                                  estudo == "4 anos de estudo" ~ 4,
+                                  estudo == "5 anos de estudo" ~ 5,
+                                  estudo == "6 anos de estudo" ~ 6,
+                                  estudo == "7 anos de estudo" ~ 7,
+                                  estudo == "8 anos de estudo" ~ 8,
+                                  estudo == "9 anos de estudo" ~ 9,
+                                  estudo == "10 anos de estudo" ~ 10,
+                                  estudo == "11 anos de estudo" ~ 11,
+                                  estudo == "12 anos de estudo" ~ 12,
+                                  estudo == "13 anos de estudo" ~ 13,
+                                  estudo == "14 anos de estudo" ~ 14,
+                                  estudo == "15 anos de estudo" ~ 15,
+                                  estudo == "16 anos ou mais de estudo" ~ 16,
+                                  TRUE ~ NA),
+         grau_instrucao = case_when(educ == "Sem instrução e menos de 1 ano de estudo" ~ 1,
+                                    educ == "Fundamental incompleto ou equivalente" ~ 2,
+                                    educ == "Fundamental completo ou equivalente" ~ 3,
+                                    educ == "Médio incompleto ou equivalente" ~ 4,
+                                    educ == "Médio completo ou equivalente" ~ 5,
+                                    educ == "Superior incompleto ou equivalente" ~ 6,
+                                    educ == "Superior completo" ~ 7,
+                                    TRUE ~ NA),
+         idade_2 = idade^2,
+         casa = ifelse(tipo_de_domicilio == "Casa",1,0),
+         tem_energia = ifelse(energia_eletrica == "Utiliza ao menos uma fonte de energia eletrica", 1, 0),
+         rede_agua = ifelse(forma_abastecimento_agua == "Rede geral de distribuição",1,0),
+         rede_esgoto = ifelse(forma_esgoto == "Rede geral, rede pluvial" |
+                                forma_esgoto == "Fossa séptica ligada à rede",1,0),
+         lixo_coletado = ifelse(destino_lixo == "Coletado diretamente por serviço de limpeza"|
+                                    destino_lixo == "Coletado em caçamba de serviço de limpeza",1,0))
+```
+
+## Análise Descritiva
+### Valor médio de aluguel por forma de coleta de esgoto
+Análise descritiva acerca do valor médio do aluguel por tipo de coleta. 
+```{r results='asis', echo = T, warning = F, message = F}
+df_reg %>% filter(!is.na(forma_esgoto)) %>% 
+  ggplot(aes(x = forma_esgoto, y = valor_aluguel)) +
+  geom_bar(stat = "summary", fun = "mean", fill = "skyblue", color = "black") +
+  labs(
+    title = "Média de Aluguel por Saneamento",
+    x = "Saneamento",
+    y = "Média de Aluguel (R$)"
+  ) +
+  theme_classic() +
+  ylim(0,700) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    plot.caption = element_text(hjust = 0, face = "italic"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+  )
+```
+
+## Resultados
+Regressão linear realizada de modo a inferir o impacto margino de possuir Rede Geral de Esgoto e Rede Geral de Distribuição de Água no valor médio de aluguel
+
+Como o modelo está na forma log-lin, a interpretação causal do efeito marginal da variavel de interesse é dado pelo exponencial de seu coeficiente, neste caso, exp(0,038) e exp(0,108). 
+Resultados apontam que a presença de Esgoto aumenta, em média, o valor de aluguel em **11,4%**, tudo mais constante. O efeito de possuir Rede de Água, por sua vez, é mais modesto e aumenta, em média, o valor de aluguel em **3,9%**.
+
+
+```{r results='asis', echo = T, warning = F, message = F}
+
+ols <- lm(log(valor_aluguel) ~ rede_agua + rede_esgoto +
+            num_banheiros + num_comodos + as.factor(tipo_de_domicilio) +
+            as.factor(material_das_paredes) + as.factor(material_telhado) +
+            as.factor(material_piso) + tem_energia +
+            urbano + as.factor(tipo_de_area) + as.factor(uf), data = df_reg)
+
+regression_results <- tidy(ols) %>% 
+  mutate()
+
+# Filtrar resultados
+filtered_results <- regression_results %>%
+  filter(term %in% c("rede_agua", "rede_esgoto")) %>% 
+  mutate(ef_marginal = exp(estimate))
+
+# Criar a tabela
+regression_table <- gt(filtered_results) %>%
+  tab_header(
+    title = "Resultados da Regressão",
+    subtitle = "Efeito da Rede de Água e Esgoto no Valor do Aluguel"
+  ) %>%
+  fmt_number(
+    columns = vars(estimate, ef_marginal, std.error, statistic, p.value),
+    decimals = 3
+  ) %>%
+  cols_label(
+    term = "Variável",
+    estimate = "Estimativa",
+    ef_marginal = "Efeito Marginal",
+    std.error = "Erro Padrão",
+    statistic = "Estatística t",
+    p.value = "Valor-p"
+  ) %>%
+  tab_footnote(
+    footnote = "Valores significativos: * p < 0.1; ** p < 0.05; *** p < 0.01",
+    locations = cells_column_labels(columns = p.value)
+  ) %>%
+  tab_options(
+    column_labels.font.size = "small",
+    heading.title.font.size = "medium",
+    heading.subtitle.font.size = "small"
+  )
+
+# Mostrar a tabela
+print(regression_table)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
