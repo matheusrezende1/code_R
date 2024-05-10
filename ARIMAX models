@@ -1,0 +1,428 @@
+rm(list=ls())
+
+library(tidyverse)
+library(TSA)
+library(seasonal)
+library(FinTS)
+library(normtest)
+library(readxl)
+library(forecast)
+library(imputeTS)
+library(urca)
+library(lmtest)
+library(knitr)
+library(fable)
+library(colortools)
+library(fpp3)
+library(stargazer)
+
+setwd("C:/Users/Matheus/Desktop/Secretária")
+data <-as.data.frame(read_xlsx("Variaveis_para_Previsão_03_23.xlsx"))
+
+mes_atual <- 3
+meses_restantes <- 12-mes_atual
+mes_escrito <- "março"
+
+#################################################################################################################
+# CRIAÇÃO DE VARIAVEIS 
+#################################################################################################################
+
+ICMS.ts <- ts(data[,2], start = c(2003, 1),end=c(2023,12), freq = 12)
+IBCBR.ts <- ts(data[,7], start = c(2003, 1),end=c(2023,12), freq = 12)
+IGPDI.ts <- ts(data[,3], start = c(2003, 1),end=c(2023,12), freq = 12)
+DIASUTEIS.ts <- ts(data[,10], start = c(2003, 1),end=c(2023,12), freq = 12)
+DOLAR.ts <- ts(data[,6], start = c(2003, 1),end=c(2023,12), freq = 12)
+PIM.ts <- ts(data[,4], start = c(2003, 1),end=c(2021,12), freq = 12) 
+PMC.ts <- ts(data[,5], start = c(2003, 1),end=c(2021,12), freq = 12) 
+IPCA.ts <- ts(data[,24], start = c(2003, 1),end=c(2023,12), freq = 12) 
+
+
+# Diferen?as
+PIM_d <- PIM.ts %>% diff(differences = 1)
+PMC_d <- PMC.ts %>% diff(differences = 1)
+IBCBR_d <- IBCBR.ts %>% diff(differences = 1)
+IPCA_d <- IPCA.ts %>% diff(differences = 1)
+ICMS_d <- ICMS.ts %>% diff(differences = 1)
+IGPDI_d <- IGPDI.ts %>% diff(differences = 1)
+
+
+# Lags
+IBCBR_lag <- stats::lag(IBCBR.ts, k = -1) %>% window(end = c(2023,12))
+IGPDI_lag <- stats::lag(IGPDI.ts, k = -1) %>% window(end = c(2023,12))
+IPCA_lag <- stats::lag(IPCA.ts, k = -1) %>% window(end = c(2023,12))
+DIASUTEIS_lag <- stats::lag(DIASUTEIS.ts, k = -1) %>% window(end = c(2023,12))
+DOLAR_lag <- stats::lag(DOLAR.ts, k = -1) %>% window(end = c(2023,12))
+
+IBCBR_lag2 <- stats::lag(IBCBR.ts, k = -2) %>% window(end = c(2023,12))
+IGPDI_lag2 <- stats::lag(IGPDI.ts, k = -2) %>% window(end = c(2023,12))
+IPCA_lag2 <- stats::lag(IPCA.ts, k = -2) %>% window(end = c(2023,12))
+DIASUTEIS_lag2 <- stats::lag(DIASUTEIS.ts, k = -2) %>% window(end = c(2023,12))
+DOLAR_lag2 <- stats::lag(DOLAR.ts, k = -2) %>% window(end = c(2023,12))
+
+IBCBR_lag3 <- stats::lag(IBCBR.ts, k = -3) %>% window(end = c(2023,12))
+IGPDI_lag3 <- stats::lag(IGPDI.ts, k = -3) %>% window(end = c(2023,12))
+IPCA_lag3 <- stats::lag(IPCA.ts, k = -3) %>% window(end = c(2023,12))
+DIASUTEIS_lag3 <- stats::lag(DIASUTEIS.ts, k = -3) %>% window(end = c(2023,12))
+DOLAR_lag3 <- stats::lag(DOLAR.ts, k = -3) %>% window(end = c(2023,12))
+
+IBCBR_lag4 <- stats::lag(IBCBR.ts, k = -4) %>% window(end = c(2023,12))
+IGPDI_lag4 <- stats::lag(IGPDI.ts, k = -4) %>% window(end = c(2023,12))
+IPCA_lag4 <- stats::lag(IPCA.ts, k = -4) %>% window(end = c(2023,12))
+DIASUTEIS_lag4 <- stats::lag(DIASUTEIS.ts, k = -4) %>% window(end = c(2023,12))
+DOLAR_lag4 <- stats::lag(DOLAR.ts, k = -4) %>% window(end = c(2023,12))
+
+
+# Dummies 
+
+LS2008NOV <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(LS2008NOV, start = c(2008, 11), end = c(2023,12)) <- 1
+
+LS2020APR <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(LS2020APR, start = c(2020, 4), end = c(2023,12)) <- 1
+
+TC2020APR04 <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(TC2020APR04, start = c(2020, 4), end = c(2020,7)) <- 1
+
+AO2020MAY <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(AO2020MAY, start = c(2020, 5), end = c(2020,5)) <- 1
+
+LS2020AUG <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(LS2020AUG, start = c(2020, 8), end = c(2023,12)) <- 1
+
+TEMP2020AUG07 <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(TEMP2020AUG07, start = c(2020, 8), end = c(2021,02)) <- 1
+
+TEMP2021JUL06 <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12) # TEMP
+window(TEMP2021JUL06, start = c(2021, 7), end = c(2021,12)) <- 1
+
+LS2020SEP <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(LS2020SEP, start = c(2020, 9), end = c(2023,12)) <- 1
+
+AO2020AUG <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(AO2020AUG, start = c(2020, 8), end = c(2020,8)) <- 1
+
+AO2021APR <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(AO2021APR, start = c(2021, 4), end = c(2021,4)) <- 1
+
+# dummies petrobras
+AO2022SET <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(AO2022SET, start = c(2022,09), end = c(2022,09)) <- 1
+
+LS2022OUT <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(LS2022OUT, start = c(2022,10), end = c(2022,10)) <- 1
+window(LS2022OUT, start = c(2022,11), end = c(2022,11)) <- 0.32
+window(LS2022OUT, start = c(2022,12), end = c(2022,12)) <- 0.95
+window(LS2022OUT, start = c(2023,01), end = c(2023,01)) <- 0.95
+window(LS2022OUT, start = c(2023,02), end = c(2023,02)) <- 0.95
+window(LS2022OUT, start = c(2023,03), end = c(2023,03)) <- 0.63
+window(LS2022OUT, start = c(2023,04), end = c(2023,04)) <- 0.47
+window(LS2022OUT, start = c(2023,05), end = c(2023,05)) <- 0.47
+
+
+TC2022OUT05 <- ts(0, start = c(2003,1), end = c(2023,12), freq = 12)
+window(TC2022OUT05, start = c(2022,10), end = c(2023,03)) <- 1
+window(TC2022OUT05, start = c(2023,04), end = c(2023,12)) <- 0.7
+
+
+##########################################################################################
+# ARIMAX ESTIMATION
+##########################################################################################
+
+dummies_icms1 <- ts.union(LS2008NOV, TC2020APR04, TC2022OUT05)
+
+
+training_date2 <- c(2023,mes_atual)
+test_date2 <-  c(2023, mes_atual+1)
+
+
+arima_dias <- auto.arima(window(ICMS.ts, end = training_date2),
+                         xreg = window(ts.union(DIASUTEIS.ts, dummies_icms1),
+                                       end = training_date2),
+                         lambda = 0, trace = T)
+
+arimax_dolar_dias <- Arima(window(ICMS.ts, end = training_date2),
+                           order = c(2,1,0), seasonal = c(2,0,0),
+                      xreg = window(ts.union(DOLAR.ts, DIASUTEIS_lag, dummies_icms1),
+                                    end = training_date2),
+                      method = "ML", include.mean = TRUE, lambda = 0) 
+
+arimax_igpdi_dolar_dias <- Arima(window(ICMS.ts, end = training_date2),
+                                 order = c(2,1,0), seasonal = c(2,0,0),
+                            xreg = window(ts.union(IGPDI_lag,
+                                                   DIASUTEIS.ts, DOLAR.ts,
+                                                   dummies_icms1),
+                                          end = training_date2),
+                            method = "ML", include.mean = TRUE, lambda = 0) 
+
+arimax_igpdi_dias_ibc <- Arima(window(ICMS.ts, end = training_date2), order = c(2,1,0), seasonal = c(2,0,0),
+                                xreg = window(ts.union(IGPDI_lag, DIASUTEIS.ts, IBCBR_lag,
+                                                       dummies_icms1), end = training_date2),
+                                method = "ML", include.mean = TRUE, lambda = 0) 
+
+arimax_igpdi_dolar_ibc_dias <- Arima(window(ICMS.ts, end = training_date2), order = c(2,1,0), seasonal = c(2,0,0),
+                                     xreg = window(ts.union(IGPDI.ts, DOLAR.ts, IBCBR_lag,
+                                                            DIASUTEIS.ts, dummies_icms1), end = training_date2),
+                                     method = "ML", include.mean = TRUE, lambda = 0) 
+
+
+arimax_igpdi_ibc_dias_teste <- Arima(window(ICMS.ts, end = training_date2),
+                                     order = c(0,1,1), seasonal = c(0,1,2),
+                                     xreg = window(ts.union(IGPDI.ts,
+                                                            IBCBR_lag,
+                                                            IBCBR.ts,
+                                                            DIASUTEIS.ts,
+                                                            dummies_icms1), end = training_date2),
+                                     method = "ML", include.mean = TRUE, lambda = 0) 
+
+arimax_ibc_teste2 <- Arima(window(ICMS.ts, end = training_date2),
+                                     order = c(0,1,1), seasonal = c(0,1,2),
+                                     xreg = window(ts.union(IBCBR_lag,
+                                                            IBCBR.ts,
+                                                            dummies_icms1), end = training_date2),
+                                     method = "ML", include.mean = TRUE, lambda = 0) 
+
+arimax_ibc_igp_teste3 <- Arima(window(ICMS.ts, end = training_date2),
+                           order = c(0,1,1), seasonal = c(0,1,2),
+                           xreg = window(ts.union(IGPDI.ts,
+                                                  IBCBR_lag,
+                                                  IBCBR.ts,
+                                                  dummies_icms1), end = training_date2),
+                           method = "ML", include.mean = TRUE, lambda = 0) 
+
+
+
+coeftest(arimax_igpdi_dolar_dias)
+coeftest(arimax_igpdi_dias_ibc)
+coeftest(arimax_igpdi_dolar_ibc_dias)
+coeftest(arima_dias)
+coeftest(arimax_igpdi_ibc_dias_teste)
+coeftest(arimax_ibc_teste2)
+
+abs(polyroot(c(1, -arimax_igpdi_dias_ibc$coef)))
+abs(polyroot(c(1, -arimax_igpdi_ibc_dias_teste$coef)))
+abs(polyroot(c(1, -arimax_ibc_teste2$coef)))
+
+
+#etsfc <- window(icms.ts, end=c(2022,2)) %>% ets() %>% forecast::forecast(h=7)
+#baggedfc <- window(icms.ts, end=c(2022,2)) %>% baggedETS() %>% forecast::forecast(h=7)
+
+# TESTE LJUNG BOX
+
+#par(mfrow=c(2,2))
+
+#Box.test(arimax_igpdi_dolar_ibc_dias$residuals,lag=24,type="Ljung-Box",fitdf = 4)
+#plot(arimax_igpdi_dolar_ibc_dias$residuals)
+#acf(arimax_igpdi_dolar_ibc_dias$residuals, na.action = na.omit)
+#pacf(arimax_igpdi_dolar_ibc_dias$residuals, na.action = na.omit)
+
+
+# ACCURACY
+
+f1 <- forecast::forecast(arima_dias,
+               xreg = window(ts.union(DIASUTEIS.ts,dummies_icms1),
+                             start = test_date2),
+               h = 15) %>% forecast::accuracy(window(ICMS.ts, start = test_date2))
+
+f5 <- forecast::forecast(arimax_igpdi_dias_ibc,
+               xreg = window(ts.union(IGPDI_lag, DIASUTEIS.ts, IBCBR_lag,
+                                      dummies_icms1), start = test_date2)) %>%
+  forecast::accuracy(window(ICMS.ts, start = test_date2))
+
+
+f_teste <- forecast::forecast(arimax_igpdi_ibc_dias_teste,
+               xreg = window(ts.union(IGPDI.ts,
+                                      IBCBR_lag,
+                                      IBCBR.ts,
+                                      DIASUTEIS.ts,
+                                      dummies_icms1), start = test_date2)) %>%
+  forecast::accuracy(window(ICMS.ts, start = test_date2))
+
+f_teste2 <- forecast::forecast(arimax_ibc_teste2,
+                    xreg = window(ts.union(IBCBR_lag,
+                                           IBCBR.ts,
+                                           dummies_icms1), start = test_date2)) %>%
+  forecast::accuracy(window(ICMS.ts, start = test_date2))
+
+
+f_teste3 <- forecast::forecast(arimax_ibc_igp_teste3,
+                     xreg = window(ts.union(IGPDI.ts,
+                                            IBCBR_lag,
+                                            IBCBR.ts,
+                                            dummies_icms1), start = test_date2)) %>%
+  forecast::accuracy(window(ICMS.ts, start = test_date2))
+
+
+
+# MAPE FORA E DENTRO DA AMOSTRA
+MAPES <- t(data.frame(f1 = f1[,5], f5= f5[,5],
+                      f_teste = f_teste[,5],
+                      f_teste2 = f_teste2[,5],
+                      f_teste3 = f_teste3[,5])) %>% as_tibble() 
+
+MAPES %>% kable("latex", digits = 2,
+                row.names = T)
+
+#MAPES %>% transmute(inverso = 1/`Test set`)
+#INV.MAPE <- MAPES %>% transmute(inv = 1/(sum(1/abs(`Test set`))*(abs(`Test set`)))) %>% as.matrix()
+
+#só usar quando não há MAPE do test set
+MAPES %>% transmute(inverso = 1/`Training set`)
+INV.MAPE <- MAPES %>% transmute(inv = 1/(sum(1/abs(`Training set`))*(abs(`Training set`)))) %>% as.matrix()
+
+PESO.ARITMERICO <- MAPES %>% transmute(peso = 1/nrow(MAPES)) %>% as.matrix()
+
+# ALL YEAR
+
+
+b_before <- window(ICMS.ts, start = c(2021, 01), end = c(2023, mes_atual)) %>% as_tibble()
+
+b1 <- forecast::forecast(arima_dias, h = 12, level = c(50,75,95),
+               xreg = window(ts.union(DIASUTEIS.ts,dummies_icms1), start = test_date2))  %>% as_tibble() %>% tail(n = meses_restantes) %>% 
+  rename(f1_mean = "Point Forecast", f1_50_l = "Lo 50", f1_50_h = "Hi 50",
+         f1_75_l = "Lo 75", f1_75_h = "Hi 75", f1_95_l = "Lo 95", f1_95_h = "Hi 95")
+
+b5 <- forecast::forecast(arimax_igpdi_dias_ibc, level = c(50,75,95),
+               xreg = window(ts.union(IGPDI_lag, DIASUTEIS.ts, IBCBR_lag,
+                                      dummies_icms1), start = test_date2)) %>%
+  as_tibble() %>% tail(n= meses_restantes) %>% 
+  rename(f5_mean = "Point Forecast", f5_50_l = "Lo 50", f5_50_h = "Hi 50",
+         f5_75_l = "Lo 75", f5_75_h = "Hi 75", f5_95_l = "Lo 95", f5_95_h = "Hi 95")
+
+
+bteste1 <- forecast::forecast(arimax_igpdi_ibc_dias_teste, level = c(50,75,95),
+               xreg = window(ts.union(IGPDI.ts,
+                                      IBCBR_lag,
+                                      IBCBR.ts,
+                                      DIASUTEIS.ts,
+                                      dummies_icms1), start = test_date2)) %>%
+  as_tibble() %>% tail(n= meses_restantes) %>% 
+  rename(fteste_mean = "Point Forecast", fteste_50_l = "Lo 50", fteste_50_h = "Hi 50",
+         fteste_75_l = "Lo 75", fteste_75_h = "Hi 75", fteste_95_l = "Lo 95", fteste_95_h = "Hi 95")
+
+
+bteste2 <- forecast::forecast(arimax_ibc_teste2, level = c(50,75,95),
+               xreg = window(ts.union(IBCBR_lag,
+                                      IBCBR.ts,
+                                      dummies_icms1), start = test_date2)) %>%
+  as_tibble() %>% tail(n= meses_restantes) %>% 
+  rename(fteste2_mean = "Point Forecast", fteste2_50_l = "Lo 50", fteste2_50_h = "Hi 50",
+         fteste2_75_l = "Lo 75", fteste2_75_h = "Hi 75", fteste2_95_l = "Lo 95", fteste2_95_h = "Hi 95")
+
+
+bteste3 <- forecast::forecast(arimax_ibc_igp_teste3, level = c(50,75,95),
+               xreg = window(ts.union(IGPDI.ts,
+                                      IBCBR_lag,
+                                      IBCBR.ts,
+                                      dummies_icms1), start = test_date2)) %>%
+  as_tibble() %>% tail(n= meses_restantes) %>% 
+  rename(fteste3_mean = "Point Forecast", fteste3_50_l = "Lo 50", fteste3_50_h = "Hi 50",
+         fteste3_75_l = "Lo 75", fteste3_75_h = "Hi 75", fteste3_95_l = "Lo 95", fteste3_95_h = "Hi 95")
+
+
+
+### ALL MODELS WITH ALL CI
+
+b_all <- bind_cols(b1,b5, bteste1, bteste2, bteste3)
+
+b_mean <- b_all %>% select(f1_mean,f5_mean,fteste_mean,fteste2_mean,fteste3_mean) %>% as.matrix()
+
+b_50_low <- b_all %>% select(f1_50_l,f5_50_l,fteste_50_l,fteste2_50_l,fteste3_50_l) %>% as.matrix()
+
+b_50_high <- b_all %>% select(f1_50_h,f5_50_h,fteste_50_h,fteste2_50_h,fteste3_50_h) %>% as.matrix()
+
+
+b_75_low <- b_all %>% select(f1_75_l,f5_75_l,fteste_75_l,fteste2_75_l,fteste3_75_l) %>% as.matrix()
+
+b_75_high <- b_all %>% select(f1_75_h,f5_75_h,fteste_75_h,fteste2_75_h,fteste3_75_h) %>% as.matrix()
+
+
+b_95_low <- b_all %>% select(f1_95_l,f5_95_l, fteste_95_l,fteste2_95_l,fteste3_95_l) %>% as.matrix()
+
+b_95_high <- b_all %>% select(f1_95_h,f5_95_h, fteste_95_h,fteste2_95_h,fteste3_95_h) %>% as.matrix()
+
+previsoes <- data.frame(b_mean%*%PESO.ARITMERICO,
+                        b_50_low%*%PESO.ARITMERICO,
+                        b_50_high%*%PESO.ARITMERICO,
+                        b_75_low%*%PESO.ARITMERICO,
+                        b_75_high%*%PESO.ARITMERICO,
+                        b_95_low%*%PESO.ARITMERICO,
+                        b_95_high%*%PESO.ARITMERICO)
+
+realizados <- data.frame(b_before,b_before,b_before,b_before,b_before,b_before,b_before)
+
+colnames(previsoes) <- c("mean", "low_50", "high_50", "low_75", "high_75", "low_95","high_95")
+
+colnames(realizados) <- c("mean", "low_50", "high_50", "low_75", "high_75", "low_95","high_95")
+
+df_final <- bind_rows(realizados, previsoes) %>%
+  mutate(month = seq(from = as.Date("2021-01-01"), to = as.Date("2023-12-01"), by = 'month'))
+
+df_final %>% tail(12) %>% select(mean) %>% sum()  
+
+writexl::write_xlsx(df_final,
+                    paste0("icms_por_ic_dummy0.7_",
+                           mes_escrito,".xlsx"))
+
+
+
+# Todos os modelos 
+
+media_modelos <- b_all %>% select(f1_mean,f5_mean,fteste_mean,fteste2_mean,fteste3_mean) 
+
+realizados %>% select(-1,-2) %>% 
+  rename(f1_mean = "high_50",
+         f5_mean = "low_75",
+         fteste_mean = "high_75",
+         fteste2_mean = "low_95",
+         fteste3_mean = "high_95") %>% 
+  bind_rows(media_modelos) %>% tail(12) %>% 
+  summarise(f1 = sum(f1_mean),
+            f5 = sum(f5_mean),
+            fteste = sum(fteste_mean),
+            fteste2 =sum(fteste2_mean),
+            fteste3 =sum(fteste3_mean))
+
+
+
+# SALVANDO MEDIA ARITMETICA
+realizados %>% select(-1,-2) %>% 
+  rename(f1_mean = "high_50",
+         f5_mean = "low_75",
+         fteste_mean = "high_75",
+         fteste2_mean = "low_95",
+         fteste3_mean = "high_95") %>% 
+  bind_rows(media_modelos) %>% 
+  mutate(month = seq(from = as.Date("2021-01-01"), to = as.Date("2023-12-01"), by = 'month')) %>%
+  rename("Modelo 1" = "f1_mean",
+         "Modelo 2" = "f5_mean",
+         "Modelo 3" = "fteste_mean",
+         "Modelo 4" = "fteste2_mean",
+         "Modelo 5" = "fteste3_mean") %>% 
+  writexl::write_xlsx(paste0("previsoes_por_modelo_dummy_",mes_escrito,".xlsx"))
+
+# GRAFICO
+realizados %>% select(-1,-2) %>% 
+  rename(f1_mean = "high_50",
+         f5_mean = "low_75",
+         fteste_mean = "high_75",
+         fteste2_mean = "low_95",
+         fteste3_mean = "high_95") %>% 
+  bind_rows(media_modelos) %>% 
+  mutate(month = seq(from = as.Date("2021-01-01"), to = as.Date("2023-12-01"), by = 'month')) %>%
+  pivot_longer(cols = c(f1_mean,f5_mean,fteste_mean,fteste2_mean,fteste3_mean),
+               names_to = "model",
+               values_to = "icms") %>% 
+  mutate(icms = icms/1000000000,
+         model = case_when(model == "f1_mean" ~ "Modelo 1",
+                           model == "f5_mean" ~ "Modelo 2",
+                           model == "fteste_mean" ~ "Modelo 3",
+                           model == "fteste2_mean" ~ "Modelo 4",
+                           model == "fteste3_mean" ~ "Modelo 5")) %>%
+  ggplot() + 
+  geom_line(aes(x = month, y = icms, color = model), size = 1.1) +
+  geom_vline(xintercept = as.numeric(as.Date("2023-02-01"))) +
+  scale_color_brewer(palette="RdYlGn") +
+  theme_classic() +
+  xlab("Data") +
+  ylab("ICMS (em bilhões)")
+
