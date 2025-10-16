@@ -19,7 +19,7 @@ options(scipen=999)
 # OD DATA TREATMENT 
 ##########################################################################################################################
 
-dataset <- read_sav("C:/Users/KG961DH/OneDrive - EY/Documents/OD 2017/OD_2017_v1.sav")
+dataset <- read_sav("/OD 2017/OD_2017_v1.sav")
 
 
 ### CREATING IMPORTANT VARIABLES
@@ -924,4 +924,5 @@ mutate(co2 = distance*fe_via*co2_ef*round(co2_cost*dolar,3),
 
   # EFEITO LIQUIDO
 (sum(pollution_averted) + welfare_lost)*365 
+
 
